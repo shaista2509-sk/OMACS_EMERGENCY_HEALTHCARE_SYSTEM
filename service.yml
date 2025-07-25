@@ -1,0 +1,84 @@
+tosca_definitions_version: tosca_simple_yaml_1_3
+
+imports:
+  - modules/docker.yaml
+
+node_types:
+  emergency.healthcare.WebApp:
+    derived_from: tosca.nodes.Container.Application.Docker
+    properties:
+      image:
+        type: string
+      ports:
+        type: list
+        entry_schema:
+          type: string
+      environment:
+        type: list
+    interfaces:
+      Standard:
+        create: playbooks/deploy-webapp.yaml
+
+  emergency.healthcare.MySQL:
+    derived_from: tosca.nodes.Database.MySQL
+    properties:
+      root_password:
+        type: string
+      database_name:
+        type: string
+    interfaces:
+      Standard:
+        create: playbooks/deploy-mysql.yaml
+
+  emergency.healthcare.Redis:
+    derived_from: tosca.nodes.Container.Application.Docker
+    properties:
+      image:
+        type: string
+      ports:
+        type: list
+    interfaces:
+      Standard:
+        create: playbooks/deploy-redis.yaml
+
+topology_template:
+  inputs:
+    mysql_root_password:
+      type: string
+      description: MySQL root password
+    mysql_database:
+      type: string
+      default: emergency_health
+
+  node_templates:
+    mysql_db:
+      type: emergency.healthcare.MySQL
+      properties:
+        root_password: { get_input: mysql_root_password }
+        database_name: { get_input: mysql_database }
+      requirements:
+        - host: docker_runtime
+
+    redis_cache:
+      type: emergency.healthcare.Redis
+      properties:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+      requirements:
+        - host: docker_runtime
+
+    web_app:
+      type: emergency.healthcare.WebApp
+      properties:
+        image: emergency_webapp:latest
+        ports: ["5000:5000"]
+        environment:
+          - DATABASE_URL=mysql+pymysql://root:{% raw %}{{ mysql_root_password }}{% endraw %}@mysql:3306/{% raw %}{{ mysql_database }}{% endraw %}
+          - REDIS_URL=redis://redis:6379/0
+      requirements:
+        - host: docker_runtime
+        - depends_on: mysql_db
+        - depends_on: redis_cache
+
+    docker_runtime:
+      type: tosca.nodes.Container.Runtime.Docker

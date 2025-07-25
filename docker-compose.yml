@@ -1,0 +1,49 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: emergency_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: Karim@2510
+      MYSQL_DATABASE: emergency_health
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    networks:
+      - healthcare_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: emergency_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - healthcare_network
+
+  webapp:
+    build: .
+    container_name: emergency_webapp
+    environment:
+      DATABASE_URL: "mysql+pymysql://root:Karim%402510@mysql:3306/emergency_health"
+      REDIS_URL: "redis://redis:6379/0"
+    ports:
+      - "5000:5000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./ml_models:/app/ml_models
+    networks:
+      - healthcare_network
+
+networks:
+  healthcare_network:
+    driver: bridge
+
+volumes:
+  mysql_data:
